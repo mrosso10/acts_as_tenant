@@ -46,4 +46,18 @@ describe SubdomainController, type: :controller do
       expect(response.body).to eq(account.subdomain)
     end
   end
+
+  context 'when there is no domain' do
+    controller do
+      def index
+        head :ok
+      end
+    end
+
+    it 'passes' do
+      @request.host = '127.0.0.1'
+      get :index
+      expect(response).to have_http_status(:ok)
+    end
+  end
 end
