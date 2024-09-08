@@ -2,6 +2,13 @@ module ActsAsTenant
   module ModelExtensions
     extend ActiveSupport::Concern
 
+    BELONGS_TO_VALID_OPTIONS = [
+      :class_name, :foreign_key, :foreign_type, :primary_key, :dependent,
+      :counter_cache, :polymorphic, :validate, :autosave, :touch,
+      :inverse_of, :optional, :required, :default, :strict_loading,
+      :ensuring_owner_was, :query_constraints
+    ]
+
     class_methods do
       def acts_as_tenant(tenant = :account, scope = nil, **options)
         ActsAsTenant.set_tenant_klass(tenant)
@@ -10,7 +17,7 @@ module ActsAsTenant
         ActsAsTenant.add_global_record_model(self) if options[:has_global_records]
 
         # Create the association
-        valid_options = options.slice(:foreign_key, :class_name, :inverse_of, :optional, :primary_key, :counter_cache, :polymorphic, :touch)
+        valid_options = options.slice(*BELONGS_TO_VALID_OPTIONS)
         fkey = valid_options[:foreign_key] || ActsAsTenant.fkey
         pkey = valid_options[:primary_key] || ActsAsTenant.pkey
         polymorphic_type = valid_options[:foreign_type] || ActsAsTenant.polymorphic_type
@@ -161,7 +168,9 @@ module ActsAsTenant
       # current record. If they do not match, an error will be added to the model, preventing it from being saved.
       #
       def tenantable_belongs_to(name, scope = nil, **options)
-        belongs_to name, scope, **options
+        valid_options = options.slice(*BELONGS_TO_VALID_OPTIONS)
+
+        belongs_to name, scope, **valid_options
 
         fkey = reflect_on_association(ActsAsTenant.tenant_klass).foreign_key.to_sym
 
@@ -169,6 +178,15 @@ module ActsAsTenant
           associated_record = send(name)
           if associated_record.present? && associated_record.send(fkey) != send(fkey)
             errors.add(fkey, "must match the #{name} model's #{fkey}")
+          end
+        end
+
+        if options[:assign_tenant_from_associated]
+          before_validation do
+            associated_record = send(name)
+            if send(fkey).blank? && associated_record.present?
+              send("#{fkey}=", associated_record.send(fkey))
+            end
           end
         end
       end

@@ -525,6 +525,14 @@ describe ActsAsTenant do
       expect(task.errors[:account_id]).to include("must match the project model's account_id")
     end
 
+    it "autimatically assings the account id if not present" do
+      project = Project.create!(account: account)
+      task = TenantableTask.new(project: project)
+
+      expect(task).to be_valid
+      expect(task.account).to eq account
+    end
+
     it 'does not enforce tenant_id matching if default belongs_to is used' do
       project = Project.create!(account: account)
       task = Task.new(project: project, account: other_account)
