@@ -540,4 +540,31 @@ describe ActsAsTenant do
       expect(task).to be_valid
     end
   end
+
+  describe 'has and belongs to many' do
+    let(:user) { User.create!(email: 'bob@foo.com', name: 'bob') }
+
+    subject do
+      ActsAsTenant.with_tenant(account) do
+        user
+      end
+    end
+
+    it 'creates the user and links it to the account' do
+      expect { subject }.to change { User.count }.by(1)
+    end
+
+    it 'creates the users account' do
+      expect { subject }.to change { UsersAccount.count }.by(1)
+      expect(user.accounts).to match_array [account]
+    end
+
+    fit 'creates an aditional users account' do
+      subject
+      bar = accounts(:bar)
+      ActsAsTenant.with_tenant(bar) do
+        user.users_accounts.create!
+      end
+    end
+  end
 end

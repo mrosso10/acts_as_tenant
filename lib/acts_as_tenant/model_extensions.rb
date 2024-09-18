@@ -21,7 +21,10 @@ module ActsAsTenant
         fkey = valid_options[:foreign_key] || ActsAsTenant.fkey
         pkey = valid_options[:primary_key] || ActsAsTenant.pkey
         polymorphic_type = valid_options[:foreign_type] || ActsAsTenant.polymorphic_type
-        belongs_to tenant, scope, **valid_options
+
+        unless options[:through].present?
+          belongs_to tenant, scope, **valid_options
+        end
 
         default_scope lambda {
           if ActsAsTenant.should_require_tenant? && ActsAsTenant.current_tenant.nil? && !ActsAsTenant.unscoped?
@@ -48,6 +51,7 @@ module ActsAsTenant
 
         # Add the following validations to the receiving model:
         # - new instances should have the tenant set
+        # - in HABTM relations, establish the association with the intermediate model
         # - validate that associations belong to the tenant, currently only for belongs_to
         #
         before_validation proc { |m|
@@ -55,18 +59,28 @@ module ActsAsTenant
             if options[:polymorphic]
               m.send("#{fkey}=".to_sym, ActsAsTenant.current_tenant.class.to_s) if m.send(fkey.to_s).nil?
               m.send("#{polymorphic_type}=".to_sym, ActsAsTenant.current_tenant.class.to_s) if m.send(polymorphic_type.to_s).nil?
+            elsif options[:through].present?
+              m.send(options[:through]).build(account: ActsAsTenant.current_tenant)
             else
               m.send "#{fkey}=".to_sym, ActsAsTenant.current_tenant.send(pkey)
             end
           end
         }, on: :create
 
+
         polymorphic_foreign_keys = reflect_on_all_associations(:belongs_to).select { |a|
           a.options[:polymorphic]
         }.map { |a| a.foreign_key }
 
+        # FIXME: should be a raw validate block to avoid
+        # belongs_to ordering issues
         reflect_on_all_associations(:belongs_to).each do |a|
-          unless a == reflect_on_association(tenant) || polymorphic_foreign_keys.include?(a.foreign_key)
+          is_tenant_through_self = lambda do
+            a.klass.respond_to?(:scoped_by_tenant_through) &&
+              a.inverse_of.present? &&
+              a.inverse_of.name == a.klass.scoped_by_tenant_through
+          end
+          unless a == reflect_on_association(tenant) || polymorphic_foreign_keys.include?(a.foreign_key) || is_tenant_through_self.call
             validates_each a.foreign_key.to_sym do |record, attr, value|
               next if value.nil?
               next unless record.will_save_change_to_attribute?(attr)
@@ -104,6 +118,13 @@ module ActsAsTenant
           end
         }
         include to_include
+
+        to_extend = Module.new {
+          define_method :scoped_by_tenant_through do
+            options[:through]
+          end
+        }
+        extend to_extend
 
         class << self
           def scoped_by_tenant?
