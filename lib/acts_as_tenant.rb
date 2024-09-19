@@ -150,9 +150,13 @@ module ActsAsTenant
     ActsAsTenant.mutable_tenant!(false)
   end
 
-  def self.should_require_tenant?
+  def self.should_require_tenant?(model: nil)
     if configuration.require_tenant.respond_to?(:call)
-      !!configuration.require_tenant.call
+      if configuration.require_tenant.arity > 0
+        !!configuration.require_tenant.call(model:)
+      else
+        !!configuration.require_tenant.call
+      end
     else
       !!configuration.require_tenant
     end

@@ -469,6 +469,34 @@ describe ActsAsTenant do
     end
   end
 
+  context "tenant required on specific model" do
+    before do
+      ActsAsTenant.configure do |config|
+        config.require_tenant = lambda do |options|
+          options[:model] == Task
+        end
+      end
+    end
+
+    after do
+      ActsAsTenant.configure do |config|
+        config.require_tenant = false
+      end
+    end
+
+    it "should not raise an error when model not requires it" do
+      expect { Project.count }.to_not raise_error
+    end
+
+    it "should raise an error when model requires it" do
+      expect { Task.count }.to raise_error(ActsAsTenant::Errors::NoTenantSet)
+    end
+
+    it "should not raise an error when inside without_tenant" do
+      expect { ActsAsTenant.without_tenant { Task.count } }.to_not raise_error
+    end
+  end
+
   context "no tenant required" do
     it "should not raise an error when no tenant is provided" do
       expect { Project.all }.to_not raise_error
