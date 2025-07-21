@@ -12,6 +12,7 @@ module ActsAsTenant
       tenant_unscoped = job_data.delete("tenant_unscoped")
 
       if tenant_unscoped
+        # FIXME: include job data
         Rails.logger.warn "WARN: Running job with ActsAsTenant unscoped. Admin?"
         ActsAsTenant.unscoped = true
       else
